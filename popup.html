@@ -1,18 +1,33 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>FunPay Lists</title>
-    <link rel="stylesheet" href="popup.css">
-  </head>
-  <body>
-    <main class="app">
-      <header class="header">
-        <h1>FunPay Lists</h1>
-        <p>Списки неподтвержденных заказов</p>
-      </header>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FunPay Lists</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="app">
+    <header class="header">
+      <div class="header-row">
+        <div>
+          <h1>FunPay Lists</h1>
+          <p>Списки неподтвержденных заказов</p>
+        </div>
+        <div class="header-actions">
+          <button id="themeToggle" class="icon-btn" title="Тёмная/светлая тема">🌙</button>
+        </div>
+      </div>
+    </header>
 
+    <!-- Tabs -->
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="main" role="tab">Заказы</button>
+      <button class="tab" data-tab="settings" role="tab">Настройки</button>
+    </nav>
+
+    <!-- Main Tab -->
+    <div id="tab-main" class="tab-content">
       <section class="controls" aria-label="Управление проверкой">
         <div class="button-grid">
           <button id="startCheck" type="button">Новая проверка</button>
@@ -35,10 +50,17 @@
             <span>Игра</span>
             <input id="gameFilter" type="search" placeholder="Netflix">
           </label>
-
           <label class="field">
             <span>Мин. цена</span>
             <input id="minPrice" type="number" min="0" step="1" value="0">
+          </label>
+          <label class="field">
+            <span>Сортировка</span>
+            <select id="sortMode">
+              <option value="amount">По сумме</option>
+              <option value="date">По дате ↓</option>
+              <option value="date_asc">По дате ↑</option>
+            </select>
           </label>
         </div>
 
@@ -96,21 +118,99 @@
         </div>
 
         <div class="detail" id="cleanOrdersBlock" hidden>
-          <h2>Можно просить подтверждение</h2>
+          <div class="list-header">
+            <h2>Можно просить подтверждение</h2>
+            <div class="pagination-controls" id="cleanPagination"></div>
+          </div>
           <ul id="cleanOrdersList"></ul>
         </div>
 
         <div class="detail" id="disputeBlock" hidden>
-          <h2>Спорные, проверить вручную</h2>
+          <div class="list-header">
+            <h2>Спорные, проверить вручную</h2>
+            <div class="pagination-controls" id="disputePagination"></div>
+          </div>
           <ul id="disputeList"></ul>
         </div>
 
         <div class="detail" id="excludedBlock" hidden>
-          <h2>Исключено арбитражем</h2>
+          <div class="list-header">
+            <h2>Исключено арбитражем</h2>
+            <div class="pagination-controls" id="excludedPagination"></div>
+          </div>
           <ul id="excludedList"></ul>
         </div>
       </section>
-    </main>
-    <script src="popup.js"></script>
-  </body>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="tab-settings" class="tab-content" hidden>
+      <section class="settings-section">
+        <h2>⏰ Напоминания</h2>
+        <label class="field">
+          <span>Напоминать если заказ висит оплаченным (дней, 0 = выкл)</span>
+          <input id="reminderDays" type="number" min="0" max="30" step="1" value="3">
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h2>🔍 Паттерны споров (Regex)</h2>
+        <label class="field">
+          <span>Дополнительные паттерны споров (по одному на строку, regex)</span>
+          <textarea id="customDisputePatterns" rows="5" placeholder="не работает&#10;обман&#10;верни деньги"></textarea>
+        </label>
+        <label class="field">
+          <span>Дополнительные паттерны чистых заказов (по одному на строку, regex)</span>
+          <textarea id="customCleanPatterns" rows="4" placeholder="спасибо&#10;всё ок&#10;работает"></textarea>
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h2>🔤 Слова (простые)</h2>
+        <label class="field">
+          <span>Чёрный список (через запятую)</span>
+          <input id="blackWords" type="text" placeholder="не работает, ошибка, верни">
+        </label>
+        <label class="field">
+          <span>Белый список (через запятую)</span>
+          <input id="whiteWords" type="text" placeholder="спасибо, получил, работает">
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h2>⚙️ Производительность</h2>
+        <label class="field">
+          <span>Задержка между запросами (мс)</span>
+          <input id="delayMs" type="number" min="500" max="10000" step="100" value="1800">
+        </label>
+        <label class="check">
+          <input id="adaptiveDelay" type="checkbox" checked>
+          <span>Адаптивная задержка</span>
+        </label>
+        <label class="field" style="margin-top:10px">
+          <span>Пауза каждые N заказов</span>
+          <input id="pauseEvery" type="number" min="5" max="100" step="5" value="25">
+        </label>
+        <label class="field">
+          <span>Длительность паузы (мс)</span>
+          <input id="pauseMs" type="number" min="1000" max="60000" step="1000" value="15000">
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h2>🎨 Внешний вид</h2>
+        <label class="check">
+          <input id="darkTheme" type="checkbox" checked>
+          <span>Тёмная тема</span>
+        </label>
+      </section>
+
+      <div style="margin-top: 16px">
+        <button id="saveSettings" type="button">Сохранить настройки</button>
+        <div id="settingsSaved" class="status" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </main>
+  <script src="popup.js"></script>
+</body>
 </html>
