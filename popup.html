@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FunPay Lists</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <h1>FunPay Lists</h1>
+        <p>Списки неподтвержденных заказов</p>
+      </header>
+
+      <section class="controls" aria-label="Управление проверкой">
+        <div class="button-grid">
+          <button id="startCheck" type="button">Новая проверка</button>
+          <button id="resumeCheck" type="button" class="secondary">Продолжить</button>
+          <button id="stopCheck" type="button" class="danger">Остановить</button>
+          <button id="copyLists" type="button" class="secondary">Скопировать</button>
+          <button id="openDisputes" type="button" class="secondary">Открыть арбитраж</button>
+          <button id="clearMemory" type="button" class="danger">Очистить память</button>
+        </div>
+      </section>
+
+      <section class="filters" aria-label="Фильтры списков">
+        <label class="field">
+          <span>Поиск</span>
+          <input id="searchFilter" type="search" placeholder="Заказ, игра, покупатель, товар">
+        </label>
+
+        <div class="settings-grid">
+          <label class="field">
+            <span>Игра</span>
+            <input id="gameFilter" type="search" placeholder="Netflix">
+          </label>
+
+          <label class="field">
+            <span>Мин. цена</span>
+            <input id="minPrice" type="number" min="0" step="1" value="0">
+          </label>
+        </div>
+
+        <div class="filter-checks">
+          <label class="check">
+            <input id="onlyAttachments" type="checkbox">
+            <span>Только с вложениями</span>
+          </label>
+          <label class="check">
+            <input id="onlyRental" type="checkbox">
+            <span>Только аренда</span>
+          </label>
+          <label class="check">
+            <input id="compactMode" type="checkbox">
+            <span>Компактно</span>
+          </label>
+        </div>
+      </section>
+
+      <section id="status" class="status" role="status"></section>
+
+      <section id="progressBlock" class="progress" hidden>
+        <div class="progress-meta">
+          <span id="progressText">Собираю заказы...</span>
+        </div>
+        <div class="progress-track">
+          <div id="progressFill" class="progress-fill"></div>
+        </div>
+      </section>
+
+      <section id="previewBlock" class="preview" hidden>
+        <h2>Текст для копирования</h2>
+        <pre id="copyPreview"></pre>
+      </section>
+
+      <section id="results" class="results" hidden>
+        <div class="stats">
+          <article>
+            <span>Можно</span>
+            <strong id="cleanCount">0</strong>
+          </article>
+          <article>
+            <span>Спорные</span>
+            <strong id="disputeCount">0</strong>
+          </article>
+          <article>
+            <span>Арбитраж</span>
+            <strong id="excludedCount">0</strong>
+          </article>
+        </div>
+
+        <div class="detail" id="historyBlock" hidden>
+          <h2>История проверок</h2>
+          <ul id="historyList"></ul>
+        </div>
+
+        <div class="detail" id="cleanOrdersBlock" hidden>
+          <h2>Можно просить подтверждение</h2>
+          <ul id="cleanOrdersList"></ul>
+        </div>
+
+        <div class="detail" id="disputeBlock" hidden>
+          <h2>Спорные, проверить вручную</h2>
+          <ul id="disputeList"></ul>
+        </div>
+
+        <div class="detail" id="excludedBlock" hidden>
+          <h2>Исключено арбитражем</h2>
+          <ul id="excludedList"></ul>
+        </div>
+      </section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
