@@ -1,45 +1,58 @@
 {
-  "manifest_version": 3,
-  "name": "FunPay Lists",
-  "description": "Создание списков неподтвержденных заказов FunPay по анализу чатов.",
-  "version": "2.6.4",
-  "permissions": [
-    "activeTab",
-    "scripting",
-    "tabs",
-    "storage"
-  ],
-  "host_permissions": [
-    "https://funpay.com/*"
-  ],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "action": {
-    "default_title": "FunPay Lists"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "popup.html",
-        "popup.css",
-        "popup.js"
-      ],
-      "matches": [
-        "https://funpay.com/*"
-      ]
-    }
-  ],
-  "content_scripts": [
-    {
-      "matches": [
-        "https://funpay.com/*"
-      ],
-      "js": [
-        "ocr.js",
-        "content.js"
-      ],
-      "run_at": "document_idle"
-    }
-  ]
+"manifest_version": 3,
+"name": "FunPay Lists",
+"description": "Создание списков неподтвержденных заказов FunPay по анализу чатов.",
+"version": "3.0.0",
+"permissions": [
+  "activeTab",
+  "scripting",
+  "tabs",
+  "storage",
+  "notifications",
+  "alarms",
+  "sidePanel"
+],
+"host_permissions": [
+  "https://funpay.com/*"
+],
+"background": {
+  "service_worker": "background.js"
+},
+"action": {
+  "default_title": "FunPay Lists"
+},
+"side_panel": {
+  "default_path": "sidepanel.html"
+},
+"web_accessible_resources": [
+  {
+    "resources": [
+      "popup.html",
+      "popup.css",
+      "popup.js",
+      "sidepanel.html",
+      "sidepanel.css",
+      "sidepanel.js",
+      "tesseract.min.js",
+      "tesseract-worker.min.js",
+      "tesseract-core.wasm.js",
+      "lang-data/rus.traineddata.gz"
+    ],
+    "matches": [
+      "https://funpay.com/*"
+    ]
+  }
+],
+"content_scripts": [
+  {
+    "matches": [
+      "https://funpay.com/*"
+    ],
+    "js": [
+      "ocr.js",
+      "content.js"
+    ],
+    "run_at": "document_idle"
+  }
+]
 }
