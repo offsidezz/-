@@ -538,7 +538,21 @@ const game   = getOrderGame(order) || "";
 const date   = order.dateIso ? ` · ${formatDate(order.dateIso)}` : "";
 const buyer  = order.buyer ? ` · ${order.buyer}` : "";
 
-if (plain) return [id, amount, game, date.trim(), buyer.trim()].filter(Boolean).join(" | ");
+if (plain) {
+  const base = [id, amount, game, date.trim(), buyer.trim()].filter(Boolean).join(" | ");
+
+  // Append arbitration-specific fields if present
+  const extraParts = [];
+  if (order.daysSinceArbitration !== "" && order.daysSinceArbitration != null) {
+    extraParts.push(`арбитраж ${order.daysSinceArbitration} дн. назад`);
+  }
+  if (order.lastStaffText) {
+    const snippet = order.lastStaffText.slice(0, 200);
+    extraParts.push(`последнее сообщение: «${snippet}»`);
+  }
+
+  return extraParts.length ? `${base}\n  ↳ ${extraParts.join(" | ")}` : base;
+}
 
 const parts = [id, amount, game].filter(Boolean).join(" | ");
 const meta  = [date, buyer].filter(s => s.trim()).join("");
@@ -589,6 +603,15 @@ if (order.isManual)      parts.push("✏️ Перемещён вручную");
 if (order.isCached)      parts.push("💾 Из кэша");
 if (order.hasWarning)    parts.push("⚠️ " + (order.warningText || "Предупреждение"));
 if (order.matchedPattern) parts.push("🔍 Паттерн: " + order.matchedPattern);
+
+// Arbitration-specific info
+if (order.daysSinceArbitration !== "" && order.daysSinceArbitration != null) {
+  parts.push(`⚖️ Арбитраж вступил ${order.daysSinceArbitration} дн. назад`);
+}
+if (order.lastStaffText) {
+  parts.push("📋 Последнее сообщение арбитража:\n" + order.lastStaffText.slice(0, 300));
+}
+
 return parts.join("\n");
 }
 
