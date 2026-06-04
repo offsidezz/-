@@ -2,15 +2,14 @@
 "manifest_version": 3,
 "name": "FunPay Lists",
 "description": "Создание списков неподтвержденных заказов FunPay по анализу чатов.",
-"version": "3.0.0",
+"version": "3.0.1",
 "permissions": [
 "activeTab",
 "scripting",
 "tabs",
 "storage",
 "notifications",
-"alarms",
-"sidePanel"
+"alarms"
 ],
 "host_permissions": [
 "https://funpay.com/*"
@@ -22,22 +21,12 @@
 "default_title": "FunPay Lists",
 "default_popup": "popup.html"
 },
-"side_panel": {
-"default_path": "sidepanel.html"
-},
 "web_accessible_resources": [
 {
   "resources": [
     "popup.html",
     "popup.css",
-    "popup.js",
-    "sidepanel.html",
-    "sidepanel.css",
-    "sidepanel.js",
-    "tesseract.min.js",
-    "tesseract-worker.min.js",
-    "tesseract-core.wasm.js",
-    "lang-data/rus.traineddata.gz"
+    "popup.js"
   ],
   "matches": [
     "https://funpay.com/*"
@@ -50,7 +39,6 @@
     "https://funpay.com/*"
   ],
   "js": [
-    "ocr.js",
     "content.js"
   ],
   "run_at": "document_idle"
