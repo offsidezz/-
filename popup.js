@@ -4,13 +4,13 @@ const STOP_MESSAGE     = "FUNPAY_LISTS_STOP_V3";
 const RESUME_MESSAGE   = "FUNPAY_LISTS_RESUME_V3";
 const FILTER_ARBITRATION_MESSAGE = "FUNPAY_LISTS_FILTER_ARBITRATION_V1";
 
-const STATE_KEY   = "funpayListsState";
+const STATE_KEY    = "funpayListsState";
 const SETTINGS_KEY = "funpayListsSettings";
-const MANUAL_KEY  = "funpayListsManual";
-const HISTORY_KEY = "funpayListsHistory";
-const CACHE_KEY   = "funpayListsOrderCache";
+const MANUAL_KEY   = "funpayListsManual";
+const HISTORY_KEY  = "funpayListsHistory";
+const CACHE_KEY    = "funpayListsOrderCache";
 
-const PAGE_SIZE = 20; // orders per page
+const PAGE_SIZE = 20;
 
 /* ── AI Constants ───────────────────────────────────────────────────────────── */
 const AI_STORAGE_KEY  = "funpayListsAI";
@@ -60,22 +60,57 @@ customCleanPatterns: "",
 };
 
 /* ── State ──────────────────────────────────────────────────────────────────── */
-let lastReport = null;
-let manualDecisions = {};
-let runHistory = [];
-let settings = { ...DEFAULT_SETTINGS };
+let lastReport       = null;
+let manualDecisions  = {};
+let runHistory       = [];
+let settings         = { ...DEFAULT_SETTINGS };
+let buttonResetTimer = null;
 
-// Pagination state per list
 const pages = { clean: 1, dispute: 1, excluded: 1 };
 
-/* ── DOM Helpers ────────────────────────────────────────────────────────────── */
-const $ = (id) => document.getElementById(id);
+/* ── DOM Helper ─────────────────────────────────────────────────────────────── */
+const getEl = (id) => document.getElementById(id);
 
-function getEl(id) {
-return document.getElementById(id);
+/* ── Toast notifications ────────────────────────────────────────────────────── */
+function showToast(msg, type = "info", durationMs = 3000) {
+let container = document.getElementById("toastContainer");
+if (!container) {
+  container = document.createElement("div");
+  container.id = "toastContainer";
+  container.style.cssText = "position:fixed;bottom:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;";
+  document.body.appendChild(container);
+}
+const toast = document.createElement("div");
+const colors = { info: "#3b82f6", success: "#22c55e", error: "#ef4444", warn: "#f59e0b" };
+toast.style.cssText = `background:${colors[type]||colors.info};color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;max-width:280px;box-shadow:0 4px 12px rgba(0,0,0,.4);opacity:0;transition:opacity .2s;pointer-events:auto;`;
+toast.textContent = msg;
+container.appendChild(toast);
+requestAnimationFrame(() => { toast.style.opacity = "1"; });
+setTimeout(() => {
+  toast.style.opacity = "0";
+  setTimeout(() => toast.remove(), 220);
+}, durationMs);
 }
 
-/* ── AI Settings Functions ──────────────────────────────────────────────────── */
+/* ── AI Status indicator ────────────────────────────────────────────────────── */
+async function updateAiStatusBadge() {
+const badge = getEl("aiStatusBadge");
+if (!badge) return;
+const stored = await chrome.storage.local.get([AI_STORAGE_KEY]);
+const ai = stored[AI_STORAGE_KEY] || {};
+if (!ai.enabled) {
+  badge.textContent = "AI: выкл";
+  badge.className = "ai-badge ai-badge--off";
+} else if (!ai.apiKey) {
+  badge.textContent = "AI: нет ключа";
+  badge.className = "ai-badge ai-badge--warn";
+} else {
+  badge.textContent = "AI: ✅ активен";
+  badge.className = "ai-badge ai-badge--on";
+}
+}
+
+/* ── AI Settings ────────────────────────────────────────────────────────────── */
 async function loadAiSettings() {
 const stored = await chrome.storage.local.get([AI_STORAGE_KEY]);
 const ai = stored[AI_STORAGE_KEY] || { enabled: false, apiKey: "", rules: AI_DEFAULT_RULES, model: "moonshotai/kimi-k2.6" };
@@ -83,48 +118,46 @@ const enabledEl = getEl("aiEnabled");
 const keyEl     = getEl("aiApiKey");
 const rulesEl   = getEl("aiRules");
 const modelEl   = getEl("aiModel");
-if (enabledEl) enabledEl.checked  = ai.enabled;
-if (keyEl)     keyEl.value        = ai.apiKey || "";
-if (rulesEl)   rulesEl.value      = ai.rules  || AI_DEFAULT_RULES;
-if (modelEl)   modelEl.value      = ai.model  || "moonshotai/kimi-k2.6";
+if (enabledEl) enabledEl.checked = ai.enabled;
+if (keyEl)     keyEl.value       = ai.apiKey || "";
+if (rulesEl)   rulesEl.value     = ai.rules  || AI_DEFAULT_RULES;
+if (modelEl)   modelEl.value     = ai.model  || "moonshotai/kimi-k2.6";
+await updateAiStatusBadge();
 }
 
 async function saveAiSettings() {
 const ai = {
-enabled:  getEl("aiEnabled")?.checked          ?? false,
-apiKey:   getEl("aiApiKey")?.value?.trim()      ?? "",
-rules:    getEl("aiRules")?.value?.trim()       || AI_DEFAULT_RULES,
-model:    getEl("aiModel")?.value?.trim()       || "moonshotai/kimi-k2.6",
+  enabled: getEl("aiEnabled")?.checked          ?? false,
+  apiKey:  getEl("aiApiKey")?.value?.trim()      ?? "",
+  rules:   getEl("aiRules")?.value?.trim()       || AI_DEFAULT_RULES,
+  model:   getEl("aiModel")?.value?.trim()       || "moonshotai/kimi-k2.6",
 };
 await chrome.storage.local.set({ [AI_STORAGE_KEY]: ai });
+await updateAiStatusBadge();
 }
 
 async function saveAiExample(order, targetKey) {
 const chatText = order.reason || order.ocrText || order.title || "";
 if (!chatText && !order.game) return;
-
 const listMap = { cleanOrders: "clean", disputeOrders: "dispute", excludedOrders: "excluded" };
 const list = listMap[targetKey];
 if (!list) return;
-
-const stored  = await chrome.storage.local.get([AI_EXAMPLES_KEY]);
+const stored   = await chrome.storage.local.get([AI_EXAMPLES_KEY]);
 const examples = stored[AI_EXAMPLES_KEY] || [];
-
 const orderKey = order.id || order.url;
 const idx = examples.findIndex((ex) => ex.orderKey === orderKey);
 if (idx !== -1) {
-examples[idx] = { ...examples[idx], list, reason: order.reason || "" };
+  examples[idx] = { ...examples[idx], list, reason: order.reason || "" };
 } else {
-examples.push({
-  orderKey,
-  chatText:    [order.reason, order.ocrText, order.title, order.game].filter(Boolean).join(" | "),
-  productText: order.game || "",
-  list,
-  reason:      order.reason || "",
-  savedAt:     Date.now(),
-});
+  examples.push({
+    orderKey,
+    chatText:    [order.reason, order.ocrText, order.title, order.game].filter(Boolean).join(" | "),
+    productText: order.game || "",
+    list,
+    reason:      order.reason || "",
+    savedAt:     Date.now(),
+  });
 }
-
 const trimmed = examples.slice(-AI_MAX_EXAMPLES);
 await chrome.storage.local.set({ [AI_EXAMPLES_KEY]: trimmed });
 }
@@ -137,17 +170,14 @@ return (stored[AI_EXAMPLES_KEY] || []).length;
 /* ── Init ───────────────────────────────────────────────────────────────────── */
 async function init() {
 const stored = await chrome.storage.local.get([STATE_KEY, MANUAL_KEY, HISTORY_KEY, SETTINGS_KEY]);
-
-manualDecisions = stored[MANUAL_KEY] || {};
+manualDecisions = stored[MANUAL_KEY]  || {};
 runHistory      = stored[HISTORY_KEY] || [];
 settings        = { ...DEFAULT_SETTINGS, ...(stored[SETTINGS_KEY] || {}) };
 
 applyTheme(settings.darkTheme !== false);
 await ensureSettings();
 
-if (stored[STATE_KEY]) {
-applyState(stored[STATE_KEY]);
-}
+if (stored[STATE_KEY]) applyState(stored[STATE_KEY]);
 
 renderHistory(runHistory);
 setupEventListeners();
@@ -155,10 +185,11 @@ setupTabs();
 loadSettingsUI();
 await loadAiSettings();
 
-// Update AI examples count display
-const count    = await getAiExamplesCount();
-const countEl  = getEl("aiExamplesCount");
+const count   = await getAiExamplesCount();
+const countEl = getEl("aiExamplesCount");
 if (countEl) countEl.textContent = `Накоплено примеров: ${count}`;
+
+setupKeyboardShortcuts();
 }
 
 async function ensureSettings() {
@@ -176,133 +207,203 @@ const cb = getEl("darkTheme");
 if (cb) cb.checked = dark;
 }
 
+/* ── Keyboard shortcuts ─────────────────────────────────────────────────────── */
+function setupKeyboardShortcuts() {
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); getEl("startCheck")?.click(); }
+  if (e.key === "Escape")             { e.preventDefault(); getEl("stopCheck")?.click(); }
+  if (e.ctrlKey && e.key === "c")     { e.preventDefault(); getEl("copyLists")?.click(); }
+});
+}
+
 /* ── Tabs ───────────────────────────────────────────────────────────────────── */
 function setupTabs() {
 const tabs = document.querySelectorAll(".tab");
 tabs.forEach(tab => {
-tab.addEventListener("click", () => {
-  tabs.forEach(t => t.classList.remove("active"));
-  tab.classList.add("active");
-  const target = tab.dataset.tab;
-  document.querySelectorAll(".tab-content").forEach(c => {
-    c.hidden = c.id !== `tab-${target}`;
+  tab.addEventListener("click", () => {
+    tabs.forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    const target = tab.dataset.tab;
+    document.querySelectorAll(".tab-content").forEach(c => {
+      c.hidden = c.id !== `tab-${target}`;
+    });
   });
-});
 });
 }
 
 /* ── Settings UI ────────────────────────────────────────────────────────────── */
 function loadSettingsUI() {
 const fields = [
-"reminderDays", "delayMs", "adaptiveDelay", "pauseEvery", "pauseMs",
-"blackWords", "whiteWords", "darkTheme", "customDisputePatterns", "customCleanPatterns"
+  "reminderDays","delayMs","adaptiveDelay","pauseEvery","pauseMs",
+  "blackWords","whiteWords","darkTheme","customDisputePatterns","customCleanPatterns"
 ];
 fields.forEach(key => {
-const el = getEl(key);
-if (!el) return;
-if (el.type === "checkbox") {
-  el.checked = settings[key] !== false && settings[key] !== 0;
-} else {
-  el.value = settings[key] ?? DEFAULT_SETTINGS[key] ?? "";
-}
+  const el = getEl(key);
+  if (!el) return;
+  if (el.type === "checkbox") {
+    el.checked = settings[key] !== false && settings[key] !== 0;
+  } else {
+    el.value = settings[key] ?? DEFAULT_SETTINGS[key] ?? "";
+  }
 });
+}
+
+let autoSaveTimer = null;
+function scheduleAutoSave() {
+clearTimeout(autoSaveTimer);
+autoSaveTimer = setTimeout(saveSettingsFromUI, 1000);
 }
 
 async function saveSettingsFromUI() {
 const newSettings = {
-reminderDays:          parseInt(getEl("reminderDays")?.value ?? "3", 10) || 0,
-delayMs:               parseInt(getEl("delayMs")?.value ?? "1800", 10) || 1800,
-adaptiveDelay:         getEl("adaptiveDelay")?.checked ?? true,
-pauseEvery:            parseInt(getEl("pauseEvery")?.value ?? "25", 10) || 25,
-pauseMs:               parseInt(getEl("pauseMs")?.value ?? "15000", 10) || 15000,
-blackWords:            getEl("blackWords")?.value?.trim() ?? "",
-whiteWords:            getEl("whiteWords")?.value?.trim() ?? "",
-darkTheme:             getEl("darkTheme")?.checked ?? true,
-customDisputePatterns: getEl("customDisputePatterns")?.value?.trim() ?? "",
-customCleanPatterns:   getEl("customCleanPatterns")?.value?.trim() ?? "",
+  reminderDays:          parseInt(getEl("reminderDays")?.value  ?? "3",     10) || 0,
+  delayMs:               parseInt(getEl("delayMs")?.value       ?? "1800",  10) || 1800,
+  adaptiveDelay:         getEl("adaptiveDelay")?.checked        ?? true,
+  pauseEvery:            parseInt(getEl("pauseEvery")?.value    ?? "25",    10) || 25,
+  pauseMs:               parseInt(getEl("pauseMs")?.value       ?? "15000", 10) || 15000,
+  blackWords:            getEl("blackWords")?.value?.trim()     ?? "",
+  whiteWords:            getEl("whiteWords")?.value?.trim()     ?? "",
+  darkTheme:             getEl("darkTheme")?.checked            ?? true,
+  customDisputePatterns: getEl("customDisputePatterns")?.value?.trim() ?? "",
+  customCleanPatterns:   getEl("customCleanPatterns")?.value?.trim()   ?? "",
 };
-
 settings = newSettings;
 await chrome.storage.local.set({ [SETTINGS_KEY]: newSettings });
 await saveAiSettings();
 applyTheme(newSettings.darkTheme);
-
+showToast("Настройки сохранены", "success", 2000);
 const saved = getEl("settingsSaved");
-if (saved) {
-saved.textContent = "✓ Настройки сохранены";
-setTimeout(() => { saved.textContent = ""; }, 2000);
-}
+if (saved) { saved.textContent = "✓ Сохранено"; setTimeout(() => { saved.textContent = ""; }, 2000); }
 }
 
 /* ── Event Listeners ────────────────────────────────────────────────────────── */
 function setupEventListeners() {
 getEl("startCheck")?.addEventListener("click", async () => {
-pages.clean = pages.dispute = pages.excluded = 1;
-await chrome.storage.local.remove([STATE_KEY]);
-await runCommand(START_MESSAGE, "Запускаю новую проверку...");
+  pages.clean = pages.dispute = pages.excluded = 1;
+  await chrome.storage.local.remove([STATE_KEY]);
+  await runCommand(START_MESSAGE, "Запускаю новую проверку...");
 });
 
 getEl("resumeCheck")?.addEventListener("click", () => runCommand(RESUME_MESSAGE, "Продолжаю проверку..."));
 getEl("stopCheck")?.addEventListener("click",   () => runCommand(STOP_MESSAGE,   "Останавливаю..."));
 
 getEl("copyLists")?.addEventListener("click", async () => {
-if (!lastReport) return setStatus("Нет данных для копирования.");
-const text    = buildCopyText(lastReport);
-const warning = getCopyWarning(lastReport);
-showPreview(text);
-if (warning) setStatus(warning);
-await copyText(text);
+  if (!lastReport) return showToast("Нет данных для копирования", "warn");
+  const text    = buildCopyText(lastReport);
+  const warning = getCopyWarning(lastReport);
+  showPreview(text);
+  if (warning) showToast(warning, "warn", 5000);
+  await copyText(text);
 });
 
 getEl("openDisputes")?.addEventListener("click", async () => {
-if (!lastReport?.excludedOrders?.length) return setStatus("Нет арбитражных заказов.");
-const orders = lastReport.excludedOrders.filter(o => o.url);
-for (const o of orders.slice(0, 10)) {
-  chrome.tabs.create({ url: o.url, active: false });
-}
+  if (!lastReport?.excludedOrders?.length) return showToast("Нет арбитражных заказов", "warn");
+  const orders = lastReport.excludedOrders.filter(o => o.url);
+  if (orders.length === 0) return showToast("Нет ссылок на заказы", "warn");
+  const count = Math.min(orders.length, 10);
+  if (orders.length > 3) {
+    const ok = confirm(`Открыть ${count} вкладок с арбитражными заказами?`);
+    if (!ok) return;
+  }
+  orders.slice(0, count).forEach(o => chrome.tabs.create({ url: o.url, active: false }));
+});
+
+getEl("openDisputes2")?.addEventListener("click", async () => {
+  if (!lastReport?.disputeOrders?.length) return showToast("Нет спорных заказов", "warn");
+  const orders = lastReport.disputeOrders.filter(o => o.url);
+  if (orders.length === 0) return showToast("Нет ссылок на заказы", "warn");
+  const count = Math.min(orders.length, 10);
+  if (orders.length > 3) {
+    const ok = confirm(`Открыть ${count} вкладок со спорными заказами?`);
+    if (!ok) return;
+  }
+  orders.slice(0, count).forEach(o => chrome.tabs.create({ url: o.url, active: false }));
 });
 
 getEl("clearMemory")?.addEventListener("click", async () => {
-await chrome.storage.local.remove([CACHE_KEY, MANUAL_KEY]);
-manualDecisions = {};
-setStatus("Память очищена.");
+  await chrome.storage.local.remove([CACHE_KEY, MANUAL_KEY]);
+  manualDecisions = {};
+  showToast("Память очищена", "success");
+});
+
+getEl("exportResults")?.addEventListener("click", () => {
+  if (!lastReport) return showToast("Нет данных для экспорта", "warn");
+  exportToCSV(lastReport);
 });
 
 getEl("themeToggle")?.addEventListener("click", async () => {
-const isDark = !document.body.classList.contains("light");
-applyTheme(!isDark);
-settings.darkTheme = !isDark;
-await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+  const isDark = !document.body.classList.contains("light");
+  applyTheme(!isDark);
+  settings.darkTheme = !isDark;
+  await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
 });
 
 getEl("saveSettings")?.addEventListener("click", saveSettingsFromUI);
 
-getEl("clearAiExamples")?.addEventListener("click", async () => {
-await chrome.storage.local.remove(AI_EXAMPLES_KEY);
-const countEl = getEl("aiExamplesCount");
-if (countEl) countEl.textContent = "Накоплено примеров: 0";
-const saved = getEl("settingsSaved");
-if (saved) {
-  saved.textContent = "✓ Примеры очищены";
-  setTimeout(() => { saved.textContent = ""; }, 2000);
-}
+// Auto-save on settings change
+["reminderDays","delayMs","pauseEvery","pauseMs","blackWords","whiteWords",
+ "customDisputePatterns","customCleanPatterns","aiApiKey","aiRules","aiModel"].forEach(id => {
+  getEl(id)?.addEventListener("input", scheduleAutoSave);
+});
+["adaptiveDelay","darkTheme","aiEnabled"].forEach(id => {
+  getEl(id)?.addEventListener("change", scheduleAutoSave);
 });
 
-// Filter listeners
-["searchFilter", "gameFilter", "minPrice", "onlyAttachments", "onlyRental", "sortMode"].forEach(id => {
-getEl(id)?.addEventListener("input",  () => { pages.clean = pages.dispute = pages.excluded = 1; refreshView(); });
-getEl(id)?.addEventListener("change", () => { pages.clean = pages.dispute = pages.excluded = 1; refreshView(); });
+getEl("clearAiExamples")?.addEventListener("click", async () => {
+  await chrome.storage.local.remove(AI_EXAMPLES_KEY);
+  const countEl = getEl("aiExamplesCount");
+  if (countEl) countEl.textContent = "Накоплено примеров: 0";
+  showToast("Примеры AI очищены", "success");
+});
+
+// Filter listeners — don't reset page on move, only on filter change
+["searchFilter","gameFilter","minPrice","onlyAttachments","onlyRental","sortMode"].forEach(id => {
+  getEl(id)?.addEventListener("input",  () => { pages.clean = pages.dispute = pages.excluded = 1; refreshView(); });
+  getEl(id)?.addEventListener("change", () => { pages.clean = pages.dispute = pages.excluded = 1; refreshView(); });
 });
 
 getEl("compactMode")?.addEventListener("change", refreshView);
 
 // Storage changes
 chrome.storage.onChanged.addListener((changes, area) => {
-if (area !== "local") return;
-if (changes[STATE_KEY])   applyState(changes[STATE_KEY].newValue);
-if (changes[MANUAL_KEY])  { manualDecisions = changes[MANUAL_KEY].newValue || {}; refreshView(); }
-if (changes[HISTORY_KEY]) { runHistory = changes[HISTORY_KEY].newValue || []; renderHistory(runHistory); }
+  if (area !== "local") return;
+  if (changes[STATE_KEY]?.newValue)  applyState(changes[STATE_KEY].newValue);
+  if (changes[MANUAL_KEY])           { manualDecisions = changes[MANUAL_KEY].newValue || {}; refreshView(); }
+  if (changes[HISTORY_KEY])          { runHistory = changes[HISTORY_KEY].newValue || []; renderHistory(runHistory); }
 });
+}
+
+/* ── Export to CSV ──────────────────────────────────────────────────────────── */
+function exportToCSV(data) {
+const cur = data.currency || "₽";
+const rows = [["Список","ID","Сумма","Игра/Товар","Покупатель","Дата","URL"]];
+const addRows = (orders, label) => {
+  (orders || []).forEach(o => {
+    rows.push([
+      label,
+      o.id || "",
+      o.amount != null ? o.amount : "",
+      getOrderGame(o),
+      o.buyer || "",
+      o.dateIso ? new Date(o.dateIso).toLocaleString("ru-RU") : "",
+      o.url || ""
+    ]);
+  });
+};
+addRows(data.cleanOrders,    "Можно");
+addRows(data.disputeOrders,  "Спорные");
+addRows(data.excludedOrders, "Арбитраж");
+
+const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+const url  = URL.createObjectURL(blob);
+const a    = document.createElement("a");
+a.href     = url;
+a.download = `funpay-lists-${new Date().toISOString().slice(0,10)}.csv`;
+a.click();
+URL.revokeObjectURL(url);
+showToast("CSV экспортирован", "success");
 }
 
 /* ── Commands ───────────────────────────────────────────────────────────────── */
@@ -310,17 +411,32 @@ async function runCommand(type, statusText) {
 setStatus(statusText);
 updateButtons("running");
 
+// Safety reset — if no response in 30s, re-enable buttons
+clearTimeout(buttonResetTimer);
+buttonResetTimer = setTimeout(() => {
+  updateButtons("idle");
+  setStatus("Нет ответа от страницы. Обнови вкладку FunPay (F5).", true);
+}, 30000);
+
 try {
-const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-if (!tab?.id) return setStatus("Нет активной вкладки.");
-if (!tab.url?.startsWith("https://funpay.com/")) return setStatus("Откройте страницу FunPay.");
-await sendTabMessage(tab.id, type, { settings });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id)  return resetAndStatus("Нет активной вкладки.");
+  if (!tab.url?.startsWith("https://funpay.com/")) return resetAndStatus("Откройте страницу FunPay.");
+  await sendTabMessage(tab.id, type, { settings });
 } catch (e) {
-setStatus("Ошибка: " + e.message, true);
-updateButtons("idle");
+  clearTimeout(buttonResetTimer);
+  setStatus("Ошибка: " + e.message, true);
+  updateButtons("idle");
 }
 }
 
+function resetAndStatus(msg) {
+clearTimeout(buttonResetTimer);
+setStatus(msg, true);
+updateButtons("idle");
+}
+
+/* ── FIX: sendTabMessage — only inject content.js, no ocr.js ───────────────── */
 async function sendTabMessage(tabId, type, payload = {}) {
 try {
   await chrome.tabs.sendMessage(tabId, { type, ...payload });
@@ -330,7 +446,7 @@ try {
     await new Promise(r => setTimeout(r, 200));
     await chrome.tabs.sendMessage(tabId, { type, ...payload });
   } catch (err) {
-    throw new Error("Не удалось подключиться к странице FunPay. Обнови вкладку (F5) и попробуй снова. (" + err.message + ")");
+    throw new Error("Не удалось подключиться к странице FunPay. Обнови вкладку (F5) и попробуй снова.");
   }
 }
 }
@@ -339,16 +455,18 @@ try {
 function applyState(state) {
 if (!state) return;
 lastReport = state;
+clearTimeout(buttonResetTimer); // got response — cancel safety reset
 updateProgress(state);
 updateButtons(state.status);
 setStatus(getStatusText(state));
 if (state.cleanOrders || state.disputeOrders || state.excludedOrders) {
-getEl("results").hidden = false;
-render(state);
+  getEl("results").hidden = false;
+  render(state);
 }
 if (state.status === "done" || state.status === "stopped") {
-const text = buildCopyText(state);
-showPreview(text);
+  const text = buildCopyText(state);
+  showPreview(text);
+  updateAiStatsDisplay(state);
 }
 }
 
@@ -362,39 +480,48 @@ const block = getEl("progressBlock");
 const fill  = getEl("progressFill");
 const text  = getEl("progressText");
 if (!block) return;
-
 if (state.status === "running" || state.status === "collecting") {
-block.hidden = false;
-const total   = state.candidateCount || 0;
-const checked = state.checkedChats   || 0;
-const pct     = total > 0 ? Math.round((checked / total) * 100) : 0;
-if (fill) fill.style.width = pct + "%";
-if (text) text.textContent = total > 0
-  ? `Проверено ${checked} из ${total} (${pct}%)`
-  : "Собираю заказы...";
+  block.hidden = false;
+  const total   = state.candidateCount || 0;
+  const checked = state.checkedChats   || 0;
+  const pct     = total > 0 ? Math.round((checked / total) * 100) : 0;
+  if (fill) fill.style.width = pct + "%";
+  if (text) text.textContent = total > 0
+    ? `Проверено ${checked} из ${total} (${pct}%)`
+    : "Собираю заказы...";
 } else {
-block.hidden = true;
+  block.hidden = true;
 }
 }
 
 function updateButtons(status) {
 const running = status === "running" || status === "collecting";
-const el = (id) => getEl(id);
-if (el("startCheck"))  el("startCheck").disabled  = running;
-if (el("resumeCheck")) el("resumeCheck").disabled = running;
-if (el("stopCheck"))   el("stopCheck").disabled   = !running;
+if (getEl("startCheck"))  getEl("startCheck").disabled  = running;
+if (getEl("resumeCheck")) getEl("resumeCheck").disabled = running;
+if (getEl("stopCheck"))   getEl("stopCheck").disabled   = !running;
 }
 
 function getStatusText(state) {
 if (!state) return "";
 switch (state.status) {
-case "collecting": return "Собираю список заказов...";
-case "running":    return `Анализирую чаты... (${state.checkedChats || 0}/${state.candidateCount || 0})`;
-case "done":       return `Готово. Проверено ${state.checkedChats || 0} заказов.`;
-case "stopped":    return "Остановлено.";
-case "error":      return "Ошибка: " + (state.errorMessage || "неизвестная");
-default:           return state.status || "";
+  case "collecting": return "Собираю список заказов...";
+  case "running":    return `Анализирую чаты... (${state.checkedChats||0}/${state.candidateCount||0})`;
+  case "done":       return `Готово. Проверено ${state.checkedChats||0} заказов.`;
+  case "stopped":    return "Остановлено.";
+  case "error":      return "Ошибка: " + (state.errorMessage || "неизвестная");
+  default:           return state.status || "";
 }
+}
+
+/* ── AI Stats display ───────────────────────────────────────────────────────── */
+function updateAiStatsDisplay(state) {
+const el = getEl("aiStatsDisplay");
+if (!el) return;
+const aiCount    = state.aiClassifiedCount    || 0;
+const rulesCount = state.rulesClassifiedCount || 0;
+if (aiCount + rulesCount === 0) { el.hidden = true; return; }
+el.hidden = false;
+el.textContent = `AI: ${aiCount} заказов | Правила: ${rulesCount} заказов`;
 }
 
 /* ── Render ─────────────────────────────────────────────────────────────────── */
@@ -403,9 +530,14 @@ const clean    = getVisibleOrders(data.cleanOrders    || []);
 const dispute  = getVisibleOrders(data.disputeOrders  || []);
 const excluded = getVisibleOrders(data.excludedOrders || []);
 
-if (getEl("cleanCount"))    getEl("cleanCount").textContent    = clean.length;
-if (getEl("disputeCount"))  getEl("disputeCount").textContent  = dispute.length;
-if (getEl("excludedCount")) getEl("excludedCount").textContent = excluded.length;
+const totalClean    = (data.cleanOrders    || []).length;
+const totalDispute  = (data.disputeOrders  || []).length;
+const totalExcluded = (data.excludedOrders || []).length;
+
+// Show total / filtered
+if (getEl("cleanCount"))    getEl("cleanCount").textContent    = clean.length < totalClean    ? `${clean.length}/${totalClean}`       : totalClean;
+if (getEl("disputeCount"))  getEl("disputeCount").textContent  = dispute.length < totalDispute  ? `${dispute.length}/${totalDispute}`   : totalDispute;
+if (getEl("excludedCount")) getEl("excludedCount").textContent = excluded.length < totalExcluded ? `${excluded.length}/${totalExcluded}` : totalExcluded;
 
 renderList("cleanOrdersBlock",  "cleanOrdersList",  clean,    "cleanOrders",    data.currency);
 renderList("disputeBlock",      "disputeList",      dispute,  "disputeOrders",  data.currency);
@@ -422,69 +554,64 @@ if (!block || !list) return;
 block.hidden = rows.length === 0;
 if (rows.length === 0) return;
 
-// Pagination key
-const pageKey = listKey === "cleanOrders" ? "clean"
-: listKey === "disputeOrders" ? "dispute" : "excluded";
-
+const pageKey = listKey === "cleanOrders" ? "clean" : listKey === "disputeOrders" ? "dispute" : "excluded";
 const totalPages  = Math.ceil(rows.length / PAGE_SIZE);
 if (pages[pageKey] > totalPages) pages[pageKey] = totalPages;
 const currentPage = pages[pageKey] || 1;
 const start       = (currentPage - 1) * PAGE_SIZE;
 const pageRows    = rows.slice(start, start + PAGE_SIZE);
 
-// Render pagination
-const paginationId = pageKey + "Pagination";
-const paginationEl = getEl(paginationId);
+// Pagination
+const paginationEl = getEl(pageKey + "Pagination");
 if (paginationEl) {
-paginationEl.innerHTML = "";
-if (totalPages > 1) {
-  const info = document.createElement("span");
-  info.className   = "page-info";
-  info.textContent = `${start + 1}–${Math.min(start + PAGE_SIZE, rows.length)} из ${rows.length}`;
-  paginationEl.appendChild(info);
-
-  for (let p = 1; p <= totalPages; p++) {
-    const btn = document.createElement("button");
-    btn.className   = "page-btn" + (p === currentPage ? " active" : "");
-    btn.textContent = p;
-    btn.addEventListener("click", () => { pages[pageKey] = p; render(lastReport); });
-    paginationEl.appendChild(btn);
+  paginationEl.innerHTML = "";
+  if (totalPages > 1) {
+    const info = document.createElement("span");
+    info.className   = "page-info";
+    info.textContent = `${start+1}–${Math.min(start+PAGE_SIZE, rows.length)} из ${rows.length}`;
+    paginationEl.appendChild(info);
+    for (let p = 1; p <= totalPages; p++) {
+      const btn = document.createElement("button");
+      btn.className   = "page-btn" + (p === currentPage ? " active" : "");
+      btn.textContent = p;
+      btn.addEventListener("click", () => { pages[pageKey] = p; render(lastReport); });
+      paginationEl.appendChild(btn);
+    }
   }
 }
-}
 
-// Render rows
+// Rows
 list.innerHTML = "";
 pageRows.forEach(order => {
-const li = document.createElement("li");
-li.className = "order-row";
+  const li = document.createElement("li");
+  li.className = "order-row";
 
-const textDiv = document.createElement("div");
-textDiv.className = "order-row-text";
-textDiv.innerHTML = formatOrderLine(order, currency);
+  const textDiv = document.createElement("div");
+  textDiv.className   = "order-row-text";
+  textDiv.innerHTML   = formatOrderLine(order, currency);
 
-const actions = document.createElement("div");
-actions.className = "row-actions";
+  const actions = document.createElement("div");
+  actions.className = "row-actions";
 
-[
-  { label: "?",  title: "Показать причину",      fn: () => toggleReason(li, order) },
-  { label: "OK", title: "Переместить в Можно",   fn: () => moveOrder(order, "cleanOrders") },
-  { label: "SP", title: "Переместить в Спорные", fn: () => moveOrder(order, "disputeOrders") },
-  { label: "AR", title: "Переместить в Арбитраж",fn: () => moveOrder(order, "excludedOrders") },
-  { label: "×",  title: "Убрать из списка",      fn: () => moveOrder(order, "removed") },
-].forEach(({ label, title, fn }) => {
-  const btn = document.createElement("button");
-  btn.className   = "row-action";
-  btn.textContent = label;
-  btn.title       = title;
-  btn.addEventListener("click", (e) => { e.stopPropagation(); fn(); });
-  actions.appendChild(btn);
-});
+  [
+    { label: "?",  title: "Показать причину",       fn: () => toggleReason(li, order) },
+    { label: "OK", title: "Переместить в Можно",    fn: () => moveOrder(order, "cleanOrders") },
+    { label: "SP", title: "Переместить в Спорные",  fn: () => moveOrder(order, "disputeOrders") },
+    { label: "AR", title: "Переместить в Арбитраж", fn: () => moveOrder(order, "excludedOrders") },
+    { label: "×",  title: "Убрать из списка",       fn: () => moveOrder(order, "removed") },
+  ].forEach(({ label, title, fn }) => {
+    const btn = document.createElement("button");
+    btn.className   = "row-action";
+    btn.textContent = label;
+    btn.title       = title;
+    btn.addEventListener("click", (e) => { e.stopPropagation(); fn(); });
+    actions.appendChild(btn);
+  });
 
-li.addEventListener("click", () => { if (order.url) chrome.tabs.create({ url: order.url }); });
-li.appendChild(textDiv);
-li.appendChild(actions);
-list.appendChild(li);
+  li.addEventListener("click", () => { if (order.url) chrome.tabs.create({ url: order.url }); });
+  li.appendChild(textDiv);
+  li.appendChild(actions);
+  list.appendChild(li);
 });
 }
 
@@ -492,21 +619,17 @@ function renderHistory(history) {
 const block = getEl("historyBlock");
 const list  = getEl("historyList");
 if (!block || !list) return;
-
 const recent = (history || []).slice(-5).reverse();
 block.hidden = recent.length === 0;
 list.innerHTML = "";
-
 recent.forEach(entry => {
-const li = document.createElement("li");
-li.textContent = `${formatDate(entry.date)} — ✅${entry.clean} ⚠️${entry.dispute} 🚫${entry.excluded}`;
-list.appendChild(li);
+  const li = document.createElement("li");
+  li.textContent = `${formatDate(entry.date)} — ✅${entry.clean} ⚠️${entry.dispute} 🚫${entry.excluded}`;
+  list.appendChild(li);
 });
 }
 
-function renderLog(log) {
-// Log is shown in status for now; can be extended
-}
+function renderLog(log) { /* reserved */ }
 
 /* ── Filters & Sort ─────────────────────────────────────────────────────────── */
 function getVisibleOrders(orders) {
@@ -518,75 +641,53 @@ const onlyRen  = getEl("onlyRental")?.checked;
 const sortMode = getEl("sortMode")?.value || "amount";
 
 let result = orders.filter(o => {
-if (onlyAtt && !o.hasAttachment) return false;
-if (onlyRen && !o.isRental)      return false;
-if (minP > 0 && (o.amount || 0) < minP) return false;
-if (game) {
-  const g = normalizeFilter(getOrderGame(o));
-  if (!g.includes(game)) return false;
-}
-if (search) {
-  const haystack = [o.id, o.title, o.game, o.subtitle, o.buyer, getOrderGame(o)]
-    .filter(Boolean).map(s => s.toLowerCase()).join(" ");
-  if (!haystack.includes(search)) return false;
-}
-return true;
+  if (onlyAtt && !o.hasAttachment) return false;
+  if (onlyRen && !o.isRental)      return false;
+  if (minP > 0 && (o.amount || 0) < minP) return false;
+  if (game) {
+    const g = normalizeFilter(getOrderGame(o));
+    if (!g.includes(game)) return false;
+  }
+  if (search) {
+    const haystack = [o.id, o.title, o.game, o.subtitle, o.buyer, getOrderGame(o), o.reason, o.ocrText]
+      .filter(Boolean).map(s => s.toLowerCase()).join(" ");
+    if (!haystack.includes(search)) return false;
+  }
+  return true;
 });
 
-// Sort
 if (sortMode === "amount") {
-result.sort((a, b) => (b.amount || 0) - (a.amount || 0) || (getOrderGame(a) || "").localeCompare(getOrderGame(b) || ""));
+  result.sort((a, b) => (b.amount||0) - (a.amount||0) || (getOrderGame(a)||"").localeCompare(getOrderGame(b)||""));
 } else if (sortMode === "date") {
-result.sort((a, b) => {
-  const da = a.dateIso ? new Date(a.dateIso).getTime() : 0;
-  const db = b.dateIso ? new Date(b.dateIso).getTime() : 0;
-  return db - da;
-});
+  result.sort((a, b) => (b.dateIso ? new Date(b.dateIso).getTime() : 0) - (a.dateIso ? new Date(a.dateIso).getTime() : 0));
 } else if (sortMode === "date_asc") {
-result.sort((a, b) => {
-  const da = a.dateIso ? new Date(a.dateIso).getTime() : 0;
-  const db = b.dateIso ? new Date(b.dateIso).getTime() : 0;
-  return da - db;
-});
+  result.sort((a, b) => (a.dateIso ? new Date(a.dateIso).getTime() : 0) - (b.dateIso ? new Date(b.dateIso).getTime() : 0));
 }
-
 return result;
 }
 
-function normalizeFilter(v) {
-return (v || "").trim().toLowerCase();
-}
+function normalizeFilter(v) { return (v || "").trim().toLowerCase(); }
 
 /* ── Order Moving ───────────────────────────────────────────────────────────── */
 async function moveOrder(order, targetKey) {
 if (!lastReport) return;
-
-["cleanOrders", "disputeOrders", "excludedOrders"].forEach(key => {
-lastReport[key] = removeFrom(lastReport[key] || [], order);
+["cleanOrders","disputeOrders","excludedOrders"].forEach(key => {
+  lastReport[key] = removeFrom(lastReport[key] || [], order);
 });
-
 if (targetKey !== "removed") {
-lastReport[targetKey] = lastReport[targetKey] || [];
-lastReport[targetKey].push(order);
+  lastReport[targetKey] = lastReport[targetKey] || [];
+  lastReport[targetKey].push(order);
 }
-
 manualDecisions[getOrderKey(order)] = targetKey;
-await chrome.storage.local.set({
-[STATE_KEY]:  lastReport,
-[MANUAL_KEY]: manualDecisions,
-});
-
-// Save as AI training example
+await chrome.storage.local.set({ [STATE_KEY]: lastReport, [MANUAL_KEY]: manualDecisions });
 await saveAiExample(order, targetKey);
-
-pages.clean = pages.dispute = pages.excluded = 1;
+// Don't reset pages on move — only reset on filter change
 render(lastReport);
 }
 
 function removeFrom(orders, order) {
 return (orders || []).filter(o => !isSameOrder(o, order));
 }
-
 function isSameOrder(a, b) {
 if (a.id && b.id) return a.id === b.id;
 return a.url === b.url;
@@ -595,19 +696,12 @@ return a.url === b.url;
 /* ── Copy & Preview ─────────────────────────────────────────────────────────── */
 function buildCopyText(data) {
 const cur   = data.currency || "₽";
-const lines = (orders) => getVisibleOrders(orders).map(o => formatOrderLine(o, cur, true)).join("
-");
-
+const lines = (orders) => getVisibleOrders(orders).map(o => formatOrderLine(o, cur, true)).join("\n");
 const parts = [];
-if (data.cleanOrders?.length)    parts.push("✅ МОЖНО:
-"    + lines(data.cleanOrders));
-if (data.disputeOrders?.length)  parts.push("⚠️ СПОРНЫЕ:
-"  + lines(data.disputeOrders));
-if (data.excludedOrders?.length) parts.push("🚫 АРБИТРАЖ:
-" + lines(data.excludedOrders));
-return parts.join("
-
-");
+if (data.cleanOrders?.length)    parts.push("✅ МОЖНО:\n"    + lines(data.cleanOrders));
+if (data.disputeOrders?.length)  parts.push("⚠️ СПОРНЫЕ:\n"  + lines(data.disputeOrders));
+if (data.excludedOrders?.length) parts.push("🚫 АРБИТРАЖ:\n" + lines(data.excludedOrders));
+return parts.join("\n\n");
 }
 
 function showPreview(text) {
@@ -626,16 +720,10 @@ return "";
 
 async function copyText(text) {
 try {
-await navigator.clipboard.writeText(text);
-setStatus("Скопировано в буфер обмена.");
+  await navigator.clipboard.writeText(text);
+  showToast("Скопировано в буфер обмена", "success");
 } catch (_e) {
-const ta = document.createElement("textarea");
-ta.value = text;
-document.body.appendChild(ta);
-ta.select();
-document.execCommand("copy");
-ta.remove();
-setStatus("Скопировано.");
+  showToast("Не удалось скопировать — скопируй вручную из превью", "error", 5000);
 }
 }
 
@@ -648,19 +736,15 @@ const date   = order.dateIso ? ` · ${formatDate(order.dateIso)}` : "";
 const buyer  = order.buyer   ? ` · ${order.buyer}` : "";
 
 if (plain) {
-const base = [id, amount, game, date.trim(), buyer.trim()].filter(Boolean).join(" | ");
-
-const extraParts = [];
-if (order.daysSinceArbitration !== "" && order.daysSinceArbitration != null) {
-  extraParts.push(`арбитраж ${order.daysSinceArbitration} дн. назад`);
-}
-if (order.lastStaffText) {
-  const snippet = order.lastStaffText.slice(0, 200);
-  extraParts.push(`последнее сообщение: «${snippet}»`);
-}
-
-return extraParts.length ? `${base}
-  ↳ ${extraParts.join(" | ")}` : base;
+  const base = [id, amount, game, date.trim(), buyer.trim()].filter(Boolean).join(" | ");
+  const extraParts = [];
+  if (order.daysSinceArbitration !== "" && order.daysSinceArbitration != null) {
+    extraParts.push(`арбитраж ${order.daysSinceArbitration} дн. назад`);
+  }
+  if (order.lastStaffText) {
+    extraParts.push(`последнее: «${order.lastStaffText.slice(0, 200)}»`);
+  }
+  return extraParts.length ? `${base}\n  ↳ ${extraParts.join(" | ")}` : base;
 }
 
 const parts = [id, amount, game].filter(Boolean).join(" | ");
@@ -681,22 +765,15 @@ if (isNaN(d.getTime())) return value;
 return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-function getOrderGame(order) {
-return order.game || order.subtitle || order.title || "";
-}
+function getOrderGame(order) { return order.game || order.subtitle || order.title || ""; }
+function getOrderKey(order)  { return order.id   || order.url      || ""; }
 
-function getOrderKey(order) {
-return order.id || order.url || "";
-}
-
-/* ── Danger Reason Toggle ───────────────────────────────────────────────────── */
+/* ── Reason Toggle ──────────────────────────────────────────────────────────── */
 function toggleReason(rowNode, order) {
 const existing = rowNode.querySelector(".danger-reason");
 if (existing) { existing.remove(); return; }
-
 const reason = buildDangerReason(order);
 if (!reason) return;
-
 const div = document.createElement("div");
 div.className   = "danger-reason";
 div.textContent = reason;
@@ -712,17 +789,13 @@ if (order.isManual)       parts.push("✏️ Перемещён вручную")
 if (order.isCached)       parts.push("💾 Из кэша");
 if (order.hasWarning)     parts.push("⚠️ " + (order.warningText || "Предупреждение"));
 if (order.matchedPattern) parts.push("🔍 Паттерн: " + order.matchedPattern);
-
 if (order.daysSinceArbitration !== "" && order.daysSinceArbitration != null) {
-parts.push(`⚖️ Арбитраж вступил ${order.daysSinceArbitration} дн. назад`);
+  parts.push(`⚖️ Арбитраж вступил ${order.daysSinceArbitration} дн. назад`);
 }
 if (order.lastStaffText) {
-parts.push("📋 Последнее сообщение арбитража:
-" + order.lastStaffText.slice(0, 300));
+  parts.push("📋 Последнее сообщение арбитража:\n" + order.lastStaffText.slice(0, 300));
 }
-
-return parts.join("
-");
+return parts.join("\n");
 }
 
 /* ── Status ─────────────────────────────────────────────────────────────────── */
