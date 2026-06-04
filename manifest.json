@@ -1,47 +1,47 @@
 {
 "manifest_version": 3,
 "name": "FunPay Lists",
-"description": "Создание списков неподтвержденных заказов FunPay по анализу чатов.",
-"version": "3.0.1",
+"version": "3.1.0",
+"description": "Автоматическая сортировка заказов FunPay по спискам с AI-классификацией",
 "permissions": [
-"activeTab",
-"scripting",
-"tabs",
-"storage",
-"notifications",
-"alarms"
+  "activeTab",
+  "scripting",
+  "tabs",
+  "storage",
+  "notifications",
+  "alarms",
+  "clipboardWrite"
 ],
 "host_permissions": [
-"https://funpay.com/*"
+  "https://funpay.com/*"
 ],
-"background": {
-"service_worker": "background.js"
-},
 "action": {
-"default_title": "FunPay Lists",
-"default_popup": "popup.html"
+  "default_popup": "popup.html",
+  "default_icon": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
 },
-"web_accessible_resources": [
-{
-  "resources": [
-    "popup.html",
-    "popup.css",
-    "popup.js"
-  ],
-  "matches": [
-    "https://funpay.com/*"
-  ]
-}
-],
+"background": {
+  "service_worker": "background.js"
+},
 "content_scripts": [
-{
-  "matches": [
-    "https://funpay.com/*"
-  ],
-  "js": [
-    "content.js"
-  ],
-  "run_at": "document_idle"
+  {
+    "matches": ["https://funpay.com/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }
+],
+"web_accessible_resources": [
+  {
+    "resources": ["icons/*.png"],
+    "matches": ["https://funpay.com/*"]
+  }
+],
+"icons": {
+  "16": "icons/icon16.png",
+  "48": "icons/icon48.png",
+  "128": "icons/icon128.png"
 }
-]
 }
