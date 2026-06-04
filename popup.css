@@ -44,6 +44,22 @@ box-sizing: border-box;
 --pagination-btn-bg: rgba(88, 215, 255, .1);
 --pagination-btn-active: rgba(88, 215, 255, .3);
 --header-border: rgba(94, 231, 255, .28);
+--toast-shadow: 0 4px 16px rgba(0,0,0,.5);
+--kbd-bg: rgba(88, 215, 255, .12);
+--kbd-border: rgba(88, 215, 255, .28);
+--kbd-text: #a8d8ff;
+--ai-badge-on-bg: rgba(34, 197, 94, .18);
+--ai-badge-on-border: rgba(34, 197, 94, .4);
+--ai-badge-on-text: #86efac;
+--ai-badge-warn-bg: rgba(245, 158, 11, .18);
+--ai-badge-warn-border: rgba(245, 158, 11, .4);
+--ai-badge-warn-text: #fcd34d;
+--ai-badge-off-bg: rgba(148, 163, 184, .12);
+--ai-badge-off-border: rgba(148, 163, 184, .25);
+--ai-badge-off-text: #94a3b8;
+--ai-stats-bg: rgba(88, 215, 255, .07);
+--ai-stats-border: rgba(88, 215, 255, .18);
+--ai-stats-text: #a8d8ff;
 }
 
 /* ── Light Theme ────────────────────────────────────────────────────────────── */
@@ -87,6 +103,22 @@ body.light {
 --pagination-btn-bg: rgba(60, 100, 200, .08);
 --pagination-btn-active: rgba(60, 100, 200, .25);
 --header-border: rgba(60, 100, 200, .22);
+--toast-shadow: 0 4px 16px rgba(0,0,0,.2);
+--kbd-bg: rgba(60, 100, 200, .1);
+--kbd-border: rgba(60, 100, 200, .28);
+--kbd-text: #2a3a80;
+--ai-badge-on-bg: rgba(22, 163, 74, .12);
+--ai-badge-on-border: rgba(22, 163, 74, .35);
+--ai-badge-on-text: #166534;
+--ai-badge-warn-bg: rgba(217, 119, 6, .12);
+--ai-badge-warn-border: rgba(217, 119, 6, .35);
+--ai-badge-warn-text: #92400e;
+--ai-badge-off-bg: rgba(100, 116, 139, .1);
+--ai-badge-off-border: rgba(100, 116, 139, .22);
+--ai-badge-off-text: #64748b;
+--ai-stats-bg: rgba(60, 100, 200, .06);
+--ai-stats-border: rgba(60, 100, 200, .18);
+--ai-stats-text: #2a3a80;
 }
 
 /* ── Base ───────────────────────────────────────────────────────────────────── */
@@ -617,4 +649,103 @@ line-height: 1.5;
 #aiApiKey {
 font-family: Consolas, "Courier New", monospace;
 letter-spacing: 0.5px;
+}
+
+/* ── AI Badge ───────────────────────────────────────────────────────────────── */
+.ai-badge {
+display: inline-flex;
+align-items: center;
+height: 26px;
+padding: 0 10px;
+border-radius: 20px;
+font-size: 11px;
+font-weight: 700;
+white-space: nowrap;
+border: 1px solid transparent;
+transition: background .2s, color .2s, border-color .2s;
+}
+
+.ai-badge--on {
+background: var(--ai-badge-on-bg);
+border-color: var(--ai-badge-on-border);
+color: var(--ai-badge-on-text);
+}
+
+.ai-badge--warn {
+background: var(--ai-badge-warn-bg);
+border-color: var(--ai-badge-warn-border);
+color: var(--ai-badge-warn-text);
+}
+
+.ai-badge--off {
+background: var(--ai-badge-off-bg);
+border-color: var(--ai-badge-off-border);
+color: var(--ai-badge-off-text);
+}
+
+/* ── AI Stats Display ───────────────────────────────────────────────────────── */
+.ai-stats {
+display: flex;
+align-items: center;
+gap: 8px;
+padding: 7px 12px;
+border-radius: 8px;
+background: var(--ai-stats-bg);
+border: 1px solid var(--ai-stats-border);
+color: var(--ai-stats-text);
+font-size: 12px;
+font-weight: 700;
+}
+
+.ai-stats::before {
+content: "🤖";
+font-size: 14px;
+}
+
+/* ── Toast Notifications ────────────────────────────────────────────────────── */
+#toastContainer {
+position: fixed;
+bottom: 16px;
+right: 16px;
+z-index: 9999;
+display: flex;
+flex-direction: column;
+gap: 8px;
+pointer-events: none;
+}
+
+/* ── Keyboard Shortcut Hints ────────────────────────────────────────────────── */
+kbd {
+display: inline-block;
+padding: 1px 6px;
+border-radius: 4px;
+background: var(--kbd-bg);
+border: 1px solid var(--kbd-border);
+color: var(--kbd-text);
+font-family: Consolas, "Courier New", monospace;
+font-size: 11px;
+font-weight: 700;
+line-height: 1.6;
+}
+
+/* ── History Block ──────────────────────────────────────────────────────────── */
+#historyBlock {
+margin-top: 4px;
+}
+
+#historyList li {
+cursor: default;
+font-size: 12px;
+color: var(--text-muted);
+grid-template-columns: 1fr;
+}
+
+/* ── small links ────────────────────────────────────────────────────────────── */
+small a {
+color: var(--accent-from);
+text-decoration: none;
+}
+
+small a:hover {
+text-decoration: underline;
 }
