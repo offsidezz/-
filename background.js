@@ -1,38 +1,6 @@
-const OPEN_PANEL_MESSAGE = "FUNPAY_LISTS_OPEN_PANEL_V1";
 const ALARM_NAME = "funpayListsReminder";
 const STATE_KEY = "funpayListsState";
 const SETTINGS_KEY = "funpayListsSettings";
-
-// ── Side Panel ──────────────────────────────────────────────────────────────
-chrome.action.onClicked.addListener(async (tab) => {
-if (!tab?.id) return;
-
-if (!tab.url?.startsWith("https://funpay.com/")) {
-  await chrome.tabs.create({ url: "https://funpay.com/orders/trade" });
-  return;
-}
-
-// Open side panel on the current tab
-try {
-  await chrome.sidePanel.open({ tabId: tab.id });
-  await chrome.sidePanel.setOptions({
-    tabId: tab.id,
-    path: "sidepanel.html",
-    enabled: true
-  });
-} catch (_e) {
-  // Fallback: inject content script and open floating panel
-  try {
-    await chrome.tabs.sendMessage(tab.id, { type: OPEN_PANEL_MESSAGE });
-  } catch (_error) {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ["ocr.js", "content.js"]
-    });
-    await chrome.tabs.sendMessage(tab.id, { type: OPEN_PANEL_MESSAGE });
-  }
-}
-});
 
 // ── Alarms: reminder for stale paid orders ──────────────────────────────────
 chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -83,7 +51,6 @@ const reminderDays = settings.reminderDays ?? 3;
 await chrome.alarms.clear(ALARM_NAME);
 
 if (reminderDays > 0) {
-  // Check every 4 hours
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: 240 });
 }
 });
