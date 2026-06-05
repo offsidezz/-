@@ -167,6 +167,17 @@ let isRunning = false;
 let shouldStop = false;
 let currentSettings = {};
 
+// ── Message name compatibility (popup.js uses old names) ──────────────────────
+const MSG_START = ["START_CHECK", "FUNPAY_LISTS_START_V3"];
+const MSG_RESUME = ["RESUME_CHECK", "FUNPAY_LISTS_RESUME_V3"];
+const MSG_STOP = ["STOP_CHECK", "FUNPAY_LISTS_STOP_V3"];
+const MSG_PING = ["PING", "FUNPAY_LISTS_PING_V3"];
+
+function isStart(type) { return MSG_START.includes(type); }
+function isResume(type) { return MSG_RESUME.includes(type); }
+function isStop(type) { return MSG_STOP.includes(type); }
+function isPing(type) { return MSG_PING.includes(type); }
+
 // ── Dispute / Clean patterns ──────────────────────────────────────────────────
 const DEFAULT_DISPUTE_PATTERNS = [
 /арбитраж/i, /модератор/i, /сотрудник funpay/i, /передано на рассмотрение/i,
@@ -264,11 +275,9 @@ let hasAttachment = false;
 let hasModeratorMessage = false;
 let productText = "";
 
-// Product description
 const descEl = doc.querySelector(".order-desc, .lot-description, [class*='description']");
 if (descEl) productText = descEl.textContent.trim().slice(0, 500);
 
-// Detect moderator/arbiter presence
 const chatContainer = doc.querySelector(".chat-messages, .messages-list, [class*='chat']");
 const allMsgEls = chatContainer
   ? chatContainer.querySelectorAll("[class*='message'], [class*='msg-']")
@@ -278,17 +287,14 @@ allMsgEls.forEach(el => {
   const classList = el.className || "";
   const text = el.textContent.trim();
 
-  // Detect role
   let role = "system";
   if (classList.includes("buyer") || classList.includes("incoming")) role = "buyer";
   else if (classList.includes("seller") || classList.includes("outgoing") || classList.includes("my-")) role = "seller";
 
-  // Detect moderator
   const isModerator = classList.includes("moderator") || classList.includes("arbiter") ||
     classList.includes("support") || /модератор|арбитр|сотрудник/i.test(text);
   if (isModerator) hasModeratorMessage = true;
 
-  // Images
   const imgs = el.querySelectorAll("img[src]");
   imgs.forEach(img => {
     const src = img.getAttribute("src");
@@ -298,7 +304,6 @@ allMsgEls.forEach(el => {
     }
   });
 
-  // Attachments (non-image)
   const attachLinks = el.querySelectorAll("a[href*='upload'], a[download], .attachment");
   if (attachLinks.length > 0) hasAttachment = true;
 
@@ -307,7 +312,6 @@ allMsgEls.forEach(el => {
   }
 });
 
-// Fallback: look for arbiter keywords in full page text
 const pageText = doc.body?.textContent || "";
 if (/арбитраж открыт|передано на рассмотрение|модератор подключился|сотрудник funpay/i.test(pageText)) {
   hasModeratorMessage = true;
@@ -329,37 +333,30 @@ const softDisputePatterns = buildPatterns(null, DEFAULT_SOFT_DISPUTE_PATTERNS);
 const blackWords = (settings.blackWords || "").split(",").map(s => s.trim()).filter(Boolean);
 const whiteWords = (settings.whiteWords || "").split(",").map(s => s.trim()).filter(Boolean);
 
-// Excluded: moderator/arbiter in chat
 if (hasModeratorMessage || matchesAny(chatText, disputePatterns)) {
   return { list: "excluded", reason: "Арбитраж или модератор обнаружен в чате", byAI: false };
 }
 
-// Black words → dispute
 if (blackWords.some(w => chatText.toLowerCase().includes(w.toLowerCase()))) {
   return { list: "dispute", reason: "Найдено слово из чёрного списка", byAI: false };
 }
 
-// Soft dispute patterns → dispute
 if (matchesAny(chatText, softDisputePatterns)) {
   return { list: "dispute", reason: "Обнаружены признаки проблемы в чате", byAI: false };
 }
 
-// Attachment without confirmation → dispute
 if (hasAttachment && !matchesAny(chatText, cleanPatterns)) {
   return { list: "dispute", reason: "Есть вложение, подтверждение не найдено", byAI: false };
 }
 
-// White words → clean
 if (whiteWords.some(w => chatText.toLowerCase().includes(w.toLowerCase()))) {
   return { list: "clean", reason: "Найдено слово из белого списка", byAI: false };
 }
 
-// Clean patterns → clean
 if (matchesAny(chatText, cleanPatterns)) {
   return { list: "clean", reason: "Покупатель подтвердил получение", byAI: false };
 }
 
-// Default: dispute (no confirmation)
 return { list: "dispute", reason: "Покупатель не подтвердил получение товара", byAI: false };
 }
 
@@ -381,7 +378,6 @@ const pauseEvery = parseInt(settings.pauseEvery) || 25;
 const pauseMs = parseInt(settings.pauseMs) || 15000;
 
 try {
-  // Step 1: collect all order IDs across pages
   sendProgress({ type: "status", text: "Собираю список заказов..." });
   const firstDoc = await fetchOrdersPage(1);
   const totalPages = getTotalPages(firstDoc);
@@ -395,7 +391,6 @@ try {
     await delay(600);
   }
 
-  // Apply filters
   const minPrice = parseFloat(settings.minPrice) || 0;
   const gameFilter = (settings.gameFilter || "").trim().toLowerCase();
   if (minPrice > 0) allOrders = allOrders.filter(o => o.amount >= minPrice);
@@ -405,14 +400,12 @@ try {
   sendProgress({ type: "total", total });
   sendProgress({ type: "status", text: `Найдено ${total} заказов. Проверяю чаты...` });
 
-  // Step 2: check each order
   for (let i = 0; i < allOrders.length; i++) {
     if (shouldStop) break;
 
     const order = allOrders[i];
     sendProgress({ type: "progress", current: i + 1, total });
 
-    // Pause every N orders
     if (i > 0 && i % pauseEvery === 0) {
       sendProgress({ type: "status", text: `Пауза ${pauseMs / 1000}с после ${i} заказов...` });
       await delay(pauseMs);
@@ -429,7 +422,6 @@ try {
 
     let classification;
 
-    // Try AI first
     if (useAI) {
       try {
         const aiResult = await callAiClassifier(chatData, aiSettings);
@@ -442,7 +434,6 @@ try {
       }
     }
 
-    // Fallback to rules
     if (!classification) {
       classification = classifyByRules(chatData, settings);
       results.rulesCount++;
@@ -467,7 +458,6 @@ try {
       counts: { clean: results.clean.length, dispute: results.dispute.length, excluded: results.excluded.length }
     });
 
-    // Adaptive delay
     const d = adaptiveDelay ? baseDelay + Math.random() * 400 : baseDelay;
     await delay(d);
   }
@@ -484,16 +474,16 @@ sendProgress({
 });
 }
 
-// ── Message listener ──────────────────────────────────────────────────────────
+// ── Message listener (supports both old and new message names) ──────────────────
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 const { type } = message;
 
-if (type === "PING") {
+if (isPing(type)) {
   sendResponse({ ok: true });
   return false;
 }
 
-if (type === "STOP_CHECK") {
+if (isStop(type)) {
   shouldStop = true;
   isRunning = false;
   sendResponse({ ok: true });
@@ -505,21 +495,17 @@ if (type === "GET_STATUS") {
   return false;
 }
 
-if (type === "START_CHECK" || type === "RESUME_CHECK") {
+if (isStart(type) || isResume(type)) {
   if (isRunning) {
     sendResponse({ ok: false, error: "Уже запущено" });
     return false;
   }
-
   const settings = message.settings || {};
-
-  // Run async, keep channel open with return true
   runCheck(settings, (progressMsg) => {
     try {
       chrome.runtime.sendMessage({ ...progressMsg, source: "content" });
     } catch {}
   });
-
   sendResponse({ ok: true, started: true });
   return false;
 }
@@ -534,7 +520,7 @@ if (type === "SAVE_AI_EXAMPLE") {
       sendResponse({ ok: true, count: trimmed.length });
     });
   });
-  return true; // async
+  return true;
 }
 
 return false;
