@@ -2,6 +2,16 @@ const ALARM_NAME = "funpayListsReminder";
 const STATE_KEY = "funpayListsState";
 const SETTINGS_KEY = "funpayListsSettings";
 
+// ── Open side panel on icon click ────────────────────────────────────────────
+chrome.action.onClicked.addListener(async (tab) => {
+await chrome.sidePanel.setOptions({
+  tabId: tab.id,
+  path: "popup.html",
+  enabled: true
+});
+await chrome.sidePanel.open({ tabId: tab.id });
+});
+
 // ── Alarms: reminder for stale paid orders ──────────────────────────────────
 chrome.alarms.onAlarm.addListener(async (alarm) => {
 if (alarm.name !== ALARM_NAME) return;
@@ -33,7 +43,6 @@ if (stale.length === 0) return;
 
 chrome.notifications.create(`funpay-stale-${Date.now()}`, {
   type: "basic",
-  iconUrl: "icons/icon48.png",
   title: "FunPay Lists — Зависшие заказы",
   message: `${stale.length} заказ(ов) оплачено более ${reminderDays} дн. назад и не закрыто.`,
   priority: 2
