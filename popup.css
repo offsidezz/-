@@ -60,6 +60,18 @@ box-sizing: border-box;
 --ai-stats-bg: rgba(88, 215, 255, .07);
 --ai-stats-border: rgba(88, 215, 255, .18);
 --ai-stats-text: #a8d8ff;
+--review-bg: rgba(245, 158, 11, .06);
+--review-border: rgba(245, 158, 11, .2);
+--review-text: #fcd34d;
+--review-btn-clean-bg: rgba(34, 197, 94, .15);
+--review-btn-clean-border: rgba(34, 197, 94, .35);
+--review-btn-clean-text: #86efac;
+--review-btn-dispute-bg: rgba(245, 158, 11, .15);
+--review-btn-dispute-border: rgba(245, 158, 11, .35);
+--review-btn-dispute-text: #fcd34d;
+--review-btn-excluded-bg: rgba(239, 68, 68, .15);
+--review-btn-excluded-border: rgba(239, 68, 68, .35);
+--review-btn-excluded-text: #fca5a5;
 }
 
 /* ── Light Theme ────────────────────────────────────────────────────────────── */
@@ -119,6 +131,18 @@ body.light {
 --ai-stats-bg: rgba(60, 100, 200, .06);
 --ai-stats-border: rgba(60, 100, 200, .18);
 --ai-stats-text: #2a3a80;
+--review-bg: rgba(217, 119, 6, .06);
+--review-border: rgba(217, 119, 6, .18);
+--review-text: #92400e;
+--review-btn-clean-bg: rgba(22, 163, 74, .12);
+--review-btn-clean-border: rgba(22, 163, 74, .3);
+--review-btn-clean-text: #166534;
+--review-btn-dispute-bg: rgba(217, 119, 6, .12);
+--review-btn-dispute-border: rgba(217, 119, 6, .3);
+--review-btn-dispute-text: #92400e;
+--review-btn-excluded-bg: rgba(220, 50, 80, .12);
+--review-btn-excluded-border: rgba(220, 50, 80, .3);
+--review-btn-excluded-text: #a01030;
 }
 
 /* ── Base ───────────────────────────────────────────────────────────────────── */
@@ -242,7 +266,7 @@ color: var(--text);
 display: none;
 }
 
-/* ── Controls & Filters ─────────────────────────────────────────────────────── */
+/* ── Controls & Filters ───────────────────────────────────────────────────── */
 .controls,
 .filters,
 .results {
@@ -597,6 +621,121 @@ gap: 10px;
 margin: 0;
 font-size: 14px;
 color: var(--text);
+}
+
+/* ── Review Queue ───────────────────────────────────────────────────────────── */
+.review-queue {
+background: var(--review-bg);
+border: 1px solid var(--review-border);
+border-radius: 10px;
+padding: 14px;
+margin-bottom: 12px;
+}
+
+.review-queue-header {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 8px;
+margin-bottom: 8px;
+}
+
+.review-queue-header h2 {
+margin: 0;
+font-size: 14px;
+color: var(--review-text);
+}
+
+.review-queue-count {
+display: inline-flex;
+align-items: center;
+height: 22px;
+padding: 0 8px;
+border-radius: 999px;
+background: var(--review-border);
+color: var(--review-text);
+font-size: 12px;
+font-weight: 700;
+}
+
+.review-queue-hint {
+font-size: 12px;
+color: var(--text-dim);
+margin: 0 0 10px;
+}
+
+.review-item {
+display: grid;
+grid-template-columns: 1fr;
+gap: 8px;
+padding: 10px 0;
+border-bottom: 1px solid var(--li-border);
+}
+
+.review-item:last-child {
+border-bottom: 0;
+padding-bottom: 0;
+}
+
+.review-item-info {
+display: flex;
+flex-direction: column;
+gap: 4px;
+}
+
+.review-item-info strong {
+font-size: 13px;
+color: var(--text);
+}
+
+.review-confidence {
+font-size: 11px;
+color: var(--text-muted);
+}
+
+.review-reason {
+font-size: 12px;
+color: var(--text-dim);
+line-height: 1.4;
+}
+
+.review-actions {
+display: flex;
+gap: 6px;
+flex-wrap: wrap;
+}
+
+.review-btn {
+height: 30px;
+padding: 0 12px;
+border-radius: 6px;
+font-size: 12px;
+font-weight: 700;
+cursor: pointer;
+border: 1px solid transparent;
+transition: opacity .15s;
+}
+
+.review-btn:hover {
+opacity: .85;
+}
+
+.review-btn--clean {
+background: var(--review-btn-clean-bg);
+border-color: var(--review-btn-clean-border);
+color: var(--review-btn-clean-text);
+}
+
+.review-btn--dispute {
+background: var(--review-btn-dispute-bg);
+border-color: var(--review-btn-dispute-border);
+color: var(--review-btn-dispute-text);
+}
+
+.review-btn--excluded {
+background: var(--review-btn-excluded-bg);
+border-color: var(--review-btn-excluded-border);
+color: var(--review-btn-excluded-text);
 }
 
 /* ── Compact Mode ───────────────────────────────────────────────────────────── */
