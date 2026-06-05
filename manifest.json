@@ -16,12 +16,7 @@
   "https://funpay.com/*"
 ],
 "action": {
-  "default_popup": "popup.html",
-  "default_icon": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  }
+  "default_popup": "popup.html"
 },
 "background": {
   "service_worker": "background.js"
@@ -32,16 +27,5 @@
     "js": ["content.js"],
     "run_at": "document_idle"
   }
-],
-"web_accessible_resources": [
-  {
-    "resources": ["icons/*.png"],
-    "matches": ["https://funpay.com/*"]
-  }
-],
-"icons": {
-  "16": "icons/icon16.png",
-  "48": "icons/icon48.png",
-  "128": "icons/icon128.png"
-}
+]
 }
