@@ -1,7 +1,7 @@
 {
 "manifest_version": 3,
 "name": "FunPay Lists",
-"version": "3.1.0",
+"version": "3.2.0",
 "description": "Автоматическая сортировка заказов FunPay по спискам с AI-классификацией",
 "permissions": [
   "activeTab",
@@ -10,13 +10,17 @@
   "storage",
   "notifications",
   "alarms",
-  "clipboardWrite"
+  "clipboardWrite",
+  "sidePanel"
 ],
 "host_permissions": [
   "https://funpay.com/*"
 ],
 "action": {
-  "default_popup": "popup.html"
+  "default_title": "FunPay Lists"
+},
+"side_panel": {
+  "default_path": "popup.html"
 },
 "background": {
   "service_worker": "background.js"
