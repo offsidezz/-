@@ -4,32 +4,31 @@
 "version": "3.2.0",
 "description": "Автоматическая сортировка заказов FunPay по спискам с AI-классификацией",
 "permissions": [
-  "activeTab",
-  "scripting",
-  "tabs",
-  "storage",
-  "notifications",
-  "alarms",
-  "clipboardWrite",
-  "sidePanel"
+"activeTab",
+"scripting",
+"tabs",
+"storage",
+"notifications",
+"alarms",
+"clipboardWrite"
 ],
 "host_permissions": [
-  "https://funpay.com/*"
+"https://funpay.com/*"
 ],
 "action": {
-  "default_title": "FunPay Lists"
+"default_title": "FunPay Lists"
 },
 "side_panel": {
-  "default_path": "popup.html"
+"default_path": "popup.html"
 },
 "background": {
-  "service_worker": "background.js"
+"service_worker": "background.js"
 },
 "content_scripts": [
-  {
-    "matches": ["https://funpay.com/*"],
-    "js": ["content.js"],
-    "run_at": "document_idle"
-  }
+{
+  "matches": ["https://funpay.com/*"],
+  "js": ["content.js"],
+  "run_at": "document_idle"
+}
 ]
 }
