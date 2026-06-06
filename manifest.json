@@ -18,17 +18,14 @@
 "action": {
 "default_title": "FunPay Lists"
 },
-"side_panel": {
-"default_path": "popup.html"
-},
 "background": {
 "service_worker": "background.js"
 },
 "content_scripts": [
 {
-  "matches": ["https://funpay.com/*"],
-  "js": ["content.js"],
-  "run_at": "document_idle"
+"matches": ["https://funpay.com/*"],
+"js": ["content.js"],
+"run_at": "document_idle"
 }
 ]
 }
