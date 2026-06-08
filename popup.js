@@ -853,13 +853,12 @@ return a.url === b.url;
 
 /* ── Copy & Preview ─────────────────────────────────────────────────────────── */
 function buildCopyText(data) {
-const cur   = data.currency || "₽";
-const lines = (orders) => getVisibleOrders(orders).map(o => formatOrderLine(o, cur, true)).join("\n");
+const ids = (orders) => getVisibleOrders(orders).map(o => `#${o.id || o.orderId || "?"}`).join(", ");
 const parts = [];
-if (data.cleanOrders?.length)    parts.push("✅ МОЖНО:\n"    + lines(data.cleanOrders));
-if (data.disputeOrders?.length)  parts.push("⚠️ СПОРНЫЕ:\n"  + lines(data.disputeOrders));
-if (data.excludedOrders?.length) parts.push("🚫 АРБИТРАЖ:\n" + lines(data.excludedOrders));
-return parts.join("\n\n");
+let num = 1;
+if (data.cleanOrders?.length)    { parts.push(`${num})${ids(data.cleanOrders)}`);   num++; }
+if (data.disputeOrders?.length)  { parts.push(`${num})${ids(data.disputeOrders)}`); num++; }
+return parts.join("\n");
 }
 
 function showPreview(text) {

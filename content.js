@@ -1008,15 +1008,9 @@ async function runCheck(settings, sendProgressFn) {
       // Rules first (fast)
       const rulesResult = classifyByRules(chatData, settings);
 
-      // If rules say excluded, no need for AI
+      // If rules say excluded (arbitrage/support) — silently skip, don't add to any list
       if (rulesResult.list === "excluded") {
-        results.excluded.push({ ...order, reason: rulesResult.reason, byAI: false });
-        results.rulesCount++;
-        sendProgressFn({
-          type: "result", list: "excluded",
-          entry: { ...order, reason: rulesResult.reason, byAI: false },
-          counts: { clean: results.clean.length, dispute: results.dispute.length, excluded: results.excluded.length }
-        });
+        console.log(`[FunPay] Skipping #${order.orderId}: ${rulesResult.reason}`);
         return;
       }
 
@@ -1038,6 +1032,11 @@ async function runCheck(settings, sendProgressFn) {
                 return;
               }
               if (aiResult.confidence >= aiThreshold) {
+                // AI says excluded → silently skip
+                if (aiResult.list === "excluded") {
+                  console.log(`[FunPay AI] Skipping #${order.orderId}: ${aiResult.reason}`);
+                  return;
+                }
                 results[aiResult.list].push({ ...order, reason: aiResult.reason, byAI: true, confidence: aiResult.confidence });
                 results.aiCount++;
                 sendProgressFn({
@@ -1081,7 +1080,10 @@ async function runCheck(settings, sendProgressFn) {
               const item = batch[i];
               const aiResult = resultMap.get(i);
               if (aiResult && aiResult.confidence >= aiThreshold) {
-                if (aiResult.confidence >= aiReviewLow && aiResult.confidence < aiReviewHigh) {
+                // AI says excluded → silently skip
+                if (aiResult.list === "excluded") {
+                  console.log(`[FunPay AI Batch] Skipping #${item.order.orderId}: ${aiResult.reason}`);
+                } else if (aiResult.confidence >= aiReviewLow && aiResult.confidence < aiReviewHigh) {
                   pendingReview.push({ ...item.order, aiResult, chatData: item.chatData, rulesResult: item.rulesResult });
                   sendProgressFn({ type: "reviewQueued", orderId: item.order.orderId, reason: aiResult.reason, confidence: aiResult.confidence });
                 } else {
