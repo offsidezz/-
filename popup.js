@@ -2,7 +2,7 @@
 const START_MESSAGE    = "FUNPAY_LISTS_START_V3";
 const STOP_MESSAGE     = "FUNPAY_LISTS_STOP_V3";
 const RESUME_MESSAGE   = "FUNPAY_LISTS_RESUME_V3";
-const FILTER_ARBITRATION_MESSAGE = "FUNPAY_LISTS_FILTER_ARBITRATION_V1";
+// REMOVED: FILTER_ARBITRATION_MESSAGE was declared but never used
 
 const STATE_KEY    = "funpayListsState";
 const SETTINGS_KEY = "funpayListsSettings";
@@ -561,19 +561,45 @@ setStatus(msg, true);
 updateButtons("idle");
 }
 
-/* ── FIX: sendTabMessage — only inject content.js, no ocr.js ───────────────── */
+/* ── FIX: sendTabMessage — robust injection with ping, retry, longer wait ──── */
 async function sendTabMessage(tabId, type, payload = {}) {
-try {
-  await chrome.tabs.sendMessage(tabId, { type, ...payload });
-} catch (_e) {
-  try {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
-    await new Promise(r => setTimeout(r, 200));
-    await chrome.tabs.sendMessage(tabId, { type, ...payload });
-  } catch (err) {
-    throw new Error("Не удалось подключиться к странице FunPay. Обнови вкладку (F5) и попробуй снова.");
+  const PING_MSG = "FUNPAY_LISTS_PING_V3";
+  const MAX_INJECT_RETRIES = 2;
+  const WAIT_AFTER_INJECT_MS = 500;
+
+  // Helper: try to ping the content script
+  async function pingAlive() {
+    try {
+      const resp = await chrome.tabs.sendMessage(tabId, { type: PING_MSG });
+      return resp && resp.ok;
+    } catch { return false; }
   }
-}
+
+  // 1. Check if content script is already alive
+  if (await pingAlive()) {
+    try {
+      await chrome.tabs.sendMessage(tabId, { type, ...payload });
+      return;
+    } catch {}
+  }
+
+  // 2. Content script not responding — inject and retry
+  for (let attempt = 0; attempt < MAX_INJECT_RETRIES; attempt++) {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+      await new Promise(r => setTimeout(r, WAIT_AFTER_INJECT_MS));
+
+      if (await pingAlive()) {
+        await chrome.tabs.sendMessage(tabId, { type, ...payload });
+        return;
+      }
+    } catch (err) {
+      console.warn(`[FunPay Popup] inject attempt ${attempt + 1} failed:`, err);
+    }
+  }
+
+  // 3. All attempts failed
+  throw new Error("Не удалось подключиться к странице FunPay. Обнови вкладку (F5) и попробуй снова.");
 }
 
 /* ── State ──────────────────────────────────────────────────────────────────── */
@@ -595,9 +621,14 @@ if (state.status === "done" || state.status === "stopped") {
 }
 if (state.reviewQueued) {
   const item = state.reviewQueued;
+  // FIX: Deduplicate review queue — prevent same order appearing multiple times
+  const itemId = item.orderId || item.order?.orderId || item.order?.id;
+  const alreadyQueued = itemId && pendingReview.some(p => (p.orderId || p.order?.orderId || p.order?.id) === itemId);
+  if (!alreadyQueued) {
   pendingReview.push(item);
   chrome.storage.local.set({ [PENDING_REVIEW_KEY]: pendingReview });
   renderReviewQueue();
+  }
 }
 }
 
@@ -892,7 +923,8 @@ if (isNaN(d.getTime())) return value;
 return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-function getOrderGame(order) { return order.game || order.subtitle || order.title || ""; }
+// FIX: Don't fallback to title (product name) — it's not the game name
+function getOrderGame(order) { return order.game || order.subtitle || ""; }
 function getOrderKey(order)  { return order.id   || order.url      || ""; }
 
 /* ── Reason Toggle ──────────────────────────────────────────────────────────── */
